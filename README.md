@@ -16,6 +16,7 @@ The map uses streets, lakes and rivers from OpenStreetMap and elevation from AWS
 
 - [pixi](https://pixi.sh), which installs Python, the Python packages and ffmpeg into a local environment.
 - [Blender](https://www.blender.org/download/) 5.0 or newer (tested with 5.2), installed separately.
+- Only for `--street-map`: Chrome or Chromium.
 
 <details>
 <summary>macOS (Homebrew)</summary>
@@ -89,7 +90,9 @@ pixi run homeruns ~/Downloads/strava_export/activities --face me.png --place Lis
 | `--crf` | 16 | Video quality; higher gives a smaller file |
 | `--font-title`, `--font-text`, `--font-clock` | system fonts | TTF/OTF files |
 | `--stills` | | Also render still images of the finished heat map in `dark`, `blueprint`, `paper` and/or `mono` (no value: all) |
-| `--no-video` | | Skip the video, e.g. to only make `--stills` |
+| `--street-map` | | Also draw a street map with names and the heat map: `liberty`, `bright` or `positron` (no value: `liberty`) |
+| `--chrome` | auto | Chrome or Chromium for `--street-map` |
+| `--no-video` | | Skip the video, e.g. to only make `--stills` or `--street-map` |
 | `--keep-frames` | | Keep the rendered PNGs in the work folder |
 | `--overlay-only` | | Redraw the text on kept frames and encode, without Blender |
 
@@ -146,9 +149,22 @@ They are named after `--out`: `home_runs_<style>.png` by default, or `home_runs_
 
 </details>
 
+<details>
+<summary><b>Street map</b></summary>
+
+`--street-map` draws a flat, north-up street map with street names. The routes go between the roads and the labels, so the names stay readable on top of them, and streets you ran more often are drawn in darker ink. The map is [OpenFreeMap](https://openfreemap.org)'s `liberty` style (`bright` and `positron` also work, e.g. `--street-map positron`), rendered by MapLibre in headless Chrome or Chromium. It needs no Blender and no API key:
+
+```bash
+pixi run homeruns ~/Downloads/strava_export/activities --street-map --no-video
+```
+
+It is named after `--out` (`home_runs_street_map.png` by default) and is 8000 px on its long side, or larger for wide areas so small streets keep their names. Map tiles, fonts and the MapLibre library are downloaded; the runs are drawn on your machine and served to the browser locally. `--chrome /path/to/chrome` points to the browser if it isn't found.
+
+</details>
+
 ## Privacy
 
-The video starts at your chosen location and every run leaves from it, and the still images show the same routes, so both can show where you live. `--privacy-radius 300` cuts the first and last 300 m of every track, like Strava's privacy zones, so runners appear at the edge of the circle. With many runs the centre can still be estimated, so don't publish the video or the images if your address must stay private.
+The video starts at your chosen location and every run leaves from it, and the still images show the same routes, so both can show where you live. `--privacy-radius 300` cuts the first and last 300 m of every track, like Strava's privacy zones, so runners appear at the edge of the circle. With many runs the centre can still be estimated, so don't publish the video or the images if your address must stay private. A street map names the streets around home, so this matters even more there; `--privacy-radius` applies to it too.
 
 <details>
 <summary><b>How it works</b></summary>
@@ -169,17 +185,19 @@ The code is in `homeruns/`:
 | `render_setup.py` | Render settings |
 | `stills.py` | Restyles and renders the last frame for still images |
 | `overlay.py` | Text, histogram and encoding; crops the still images |
+| `streetmap.py` | Street map with names (OpenFreeMap, MapLibre in headless Chrome) |
 | `timewarp.py` | Clock curve |
 | `face.py` | Face and dot marker sprites |
 | `__main__.py` | Command line and pipeline |
 
-Tests for track reading, cleaning, the map cache, lake and river outlines and the clock curve are in `tests/` and run with `pixi run test` (or `uv run pytest`). They don't include Blender.
+Tests for track reading, cleaning, the map cache, lake and river outlines, the street map layout and the clock curve are in `tests/` and run with `pixi run test` (or `uv run pytest`). They don't include Blender or the browser.
 
 </details>
 
 ## Credits
 
-- Map data © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors (ODbL). The video and the still images carry this credit.
+- Map data © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors (ODbL). The video and the images carry this credit.
+- Street maps: tiles from [OpenFreeMap](https://openfreemap.org) © [OpenMapTiles](https://openmaptiles.org), drawn with [MapLibre GL JS](https://maplibre.org). The image carries the credit.
 - Elevation from [AWS Terrain Tiles](https://registry.opendata.aws/terrain-tiles/) (SRTM, GMTED, NED and other sources).
 - Strava is a trademark of Strava, Inc. and Garmin is a trademark of Garmin Ltd. This project is not affiliated with or endorsed by either.
 

@@ -2,6 +2,7 @@
 
   homeruns <gpx/tcx/fit files or folders> [--face me.png] [--preview] [--keep-frames]
   homeruns <files or folders> --stills [--no-video]   still images of the finished heat map
+  homeruns <files or folders> --street-map [--no-video]   a street map with names and the heat map
   homeruns --overlay-only [--title ...] [--preview]   redo the text on kept frames, no Blender
 
 
@@ -19,7 +20,7 @@ from datetime import date
 
 import numpy as np
 
-from . import basemap, face, overlay, prepare, timewarp, tracks
+from . import basemap, face, overlay, prepare, streetmap, timewarp, tracks
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 FPS, INTRO, OUTRO, RAMP, TIME_K = 30, 45, 120, 60, 2.3
@@ -58,7 +59,11 @@ def parse_args(argv):
     p.add_argument("--stills", nargs="?", const="all", metavar="STYLES",
                    help="also render the finished heat map as still images, one per map style: comma-separated "
                         f"from {', '.join(STILL_STYLES)} (no value: all)")
-    p.add_argument("--no-video", action="store_true", help="skip the video, e.g. to only make --stills")
+    p.add_argument("--street-map", nargs="?", const="liberty", choices=streetmap.STYLES, metavar="STYLE",
+                   help="also draw a flat street map with street names and the heat map (OpenFreeMap, needs "
+                        f"Chrome or Chromium); style {', '.join(streetmap.STYLES)} (no value: liberty)")
+    p.add_argument("--chrome", help="path to Chrome or Chromium for --street-map (default: found automatically)")
+    p.add_argument("--no-video", action="store_true", help="skip the video, e.g. to only make --stills or --street-map")
     p.add_argument("--keep-frames", action="store_true", help="keep the rendered PNG frames")
     p.add_argument("--overlay-only", action="store_true",
                    help="skip Blender: redraw the overlay on frames kept by an earlier --keep-frames run and encode")
@@ -74,12 +79,12 @@ def parse_args(argv):
         if bad:
             p.error(f"unknown still style {bad[0]!r}; choose from {', '.join(STILL_STYLES)} "
                     "(--stills takes an optional value, so put it after the files)")
-    if a.overlay_only and (a.stills or a.no_video):
-        p.error("--stills and --no-video need the tracks, not --overlay-only")
+    if a.overlay_only and (a.stills or a.street_map or a.no_video):
+        p.error("--stills, --street-map and --no-video need the tracks, not --overlay-only")
     if not a.inputs and not a.overlay_only:
         p.error("give GPX/TCX/FIT files or folders (or --overlay-only)")
-    if a.no_video and not a.stills:
-        p.error("--no-video leaves nothing to make; add --stills")
+    if a.no_video and not (a.stills or a.street_map):
+        p.error("--no-video leaves nothing to make; add --stills or --street-map")
     return a
 
 
@@ -174,7 +179,9 @@ def main(argv=None):
         raise SystemExit("ffmpeg not found on PATH.")
     if a.overlay_only:
         return overlay_only(a)
-    blender = find_blender(a.blender)
+    blender = find_blender(a.blender) if a.stills or not a.no_video else None   # the street map needs no Blender
+    chrome = streetmap.find_chrome(a.chrome) if a.street_map else None
+    root = os.path.splitext(a.out)[0] + ("_preview" if a.preview else "")
     W, H = (int(v) for v in a.size.lower().split("x"))
     work = os.path.abspath(a.work)
     os.makedirs(work, exist_ok=True)
@@ -205,6 +212,10 @@ def main(argv=None):
     if a.privacy_radius > 0:
         runs = [r for r in (tracks.hide_ends(r, home, a.privacy_radius) for r in runs) if r is not None]
     runs.sort(key=lambda r: r.start)
+    if a.street_map:
+        streetmap.render(runs, f"{root}_street_map.png", a.street_map, chrome, 4000 if a.preview else 8000)
+    if not blender:
+        return
 
     # ---- map ----
     allp = np.concatenate([r.loc for r in runs])
@@ -241,7 +252,7 @@ def main(argv=None):
         sys.stderr.write(r.stdout[-3000:] + r.stderr[-3000:])
         raise SystemExit("Blender scene build failed")
     if a.stills:
-        render_stills(a, blender, work, os.path.splitext(a.out)[0] + ("_preview" if a.preview else ""))
+        render_stills(a, blender, work, root)
     if a.no_video:
         return
 
